@@ -1,0 +1,34 @@
+from langgraph.graph import StateGraph, MessagesState
+from langchain_core.messages import SystemMessage
+from langchain_openai import ChatOpenAI
+# from langchain_google_genai import ChatGoogleGenerativeAI
+from langgraph.prebuilt import ToolNode
+from langgraph.checkpoint.memory import MemorySaver
+import os
+
+def build_workflow(tools, system_prompt):
+    model = ChatOpenAI(model="gpt-4o-mini", temperature=0).bind_tools(tools)
+    # api_key = os.getenv("GOOGLE_API_KEY")
+    # model = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0, google_api_key = api_key).bind_tools(tools)
+
+    tool_node = ToolNode(tools)
+
+    def call_model(state: MessagesState):
+        response = model.invoke([SystemMessage(content=system_prompt)] + state["messages"])
+        return {"messages": [response]}
+
+    def should_continue(state: MessagesState):
+        last_message = state["messages"][-1]
+        if last_message.tool_calls:
+            return "tools"
+        return "__end__"
+
+    workflow = StateGraph(MessagesState)
+    workflow.add_node("agent", call_model)
+    workflow.add_node("tools", tool_node)
+    workflow.add_edge("__start__", "agent")
+    workflow.add_conditional_edges("agent", should_continue)
+    workflow.add_edge("tools", "agent")
+
+    memory = MemorySaver()
+    return workflow.compile(checkpointer=memory)

@@ -6,17 +6,47 @@ from langchain_weaviate import WeaviateVectorStore
 from app.config import WEAVIATE_URL, WEAVIATE_API_KEY
 
 
+# def get_weaviate_client():
+#     """
+#     Connect to Weaviate Cloud (WCS) using the v4 client.
+#     Includes custom User-Agent for traceability.
+#     """
+#     client = connect_to_weaviate_cloud(
+#         cluster_url=WEAVIATE_URL,
+#         auth_credentials=WEAVIATE_API_KEY,
+#         headers={"User-Agent": os.getenv("USER_AGENT", "Strategisthub-RAG/1.0")},
+#     )
+#     return client
+
+from weaviate import connect_to_weaviate_cloud
+import os
+
 def get_weaviate_client():
-    """
-    Connect to Weaviate Cloud (WCS) using the v4 client.
-    Includes custom User-Agent for traceability.
-    """
-    client = connect_to_weaviate_cloud(
-        cluster_url=WEAVIATE_URL,
-        auth_credentials=WEAVIATE_API_KEY,
-        headers={"User-Agent": os.getenv("USER_AGENT", "Strategisthub-RAG/1.0")},
-    )
-    return client
+    url = os.getenv("WEAVIATE_URL")
+    api_key = os.getenv("WEAVIATE_API_KEY")
+
+    try:
+        client = connect_to_weaviate_cloud(
+            cluster_url=url.replace("grpc-", "https://"),  # ensure https:// not grpc-
+            auth_credentials=api_key,
+            headers={"User-Agent": os.getenv("USER_AGENT", "Strategisthub-RAG/1.0")},
+            skip_init_checks=True,  # ← disable gRPC health check
+        )
+        print("Connected to Weaviate (REST mode)")
+        return client
+    except Exception as e:
+        print("Failed initial connect, retrying with extended timeout...", e)
+        # timeout_cfg = init.AdditionalConfig(timeout=init.Timeout(init=30))
+        # client = connect_to_weaviate_cloud(
+        #     cluster_url=url.replace("grpc-", "https://"),
+        #     auth_credentials=api_key,
+        #     headers={"User-Agent": os.getenv("USER_AGENT", "Strategisthub-RAG/1.0")},
+        #     additional_config=timeout_cfg,
+        #     skip_init_checks=True,
+        # )
+        # print("Connected with extended timeout (REST mode)")
+        # return client
+
 
 
 def ensure_schema(client):
@@ -71,21 +101,57 @@ def create_or_load_vectorstore(docs=None):
         text_key="page_content",
         embedding=embeddings,
     )
-    if client.collections.exists(index_name):
-        print("Do you want to add more data to the collection? Y/n")
-        inp = input().lower()
-        if inp == 'y':
-            if docs:
-                docs = clean_metadata(docs)
-                try:
-                    vectorstore.add_documents(docs)
-                except Exception as e:
-                    print("Failed to upload some documents:", e)
+    if docs:
+        docs = clean_metadata(docs)
+        try:
+            print("Adding data...")
+            vectorstore.add_documents(docs)
+        except Exception as e:
+            print("Failed to upload some documents:", e)
+    else:
+        print("Did not received any doc!!!")
 
-            return vectorstore.as_retriever(search_kwargs={"k": 3})
-        elif inp == "n":
-            return vectorstore.as_retriever(search_kwargs={"k": 3})
     return vectorstore.as_retriever(search_kwargs={"k": 3})
+
+
+    # if client.collections.exists(index_name):
+    #     print("Do you want to add more data to the collection? Y/n")
+    #     inp = input().lower()
+    #     if inp == 'y':
+    #         if docs:
+    #             docs = clean_metadata(docs)
+    #             try:
+    #                 vectorstore.add_documents(docs)
+    #             except Exception as e:
+    #                 print("Failed to upload some documents:", e)
+
+    #         return vectorstore.as_retriever(search_kwargs={"k": 3})
+    #     elif inp == "n":
+    #         return vectorstore.as_retriever(search_kwargs={"k": 3})
+    # return vectorstore.as_retriever(search_kwargs={"k": 3})
+
+def load_vectorstore():
+    """
+    Create or load Weaviate vector store and optionally add new docs.
+    Automatically handles schema creation and metadata cleanup.
+    """
+    client = get_weaviate_client()
+
+    embeddings = OpenAIEmbeddings()
+    collection_name = "StrategisthubDocs"
+
+    vectorstore = WeaviateVectorStore(
+        client=client,
+        index_name=collection_name,
+        text_key="page_content",
+        embedding=embeddings,
+    )
+    try:
+        if client.collections.exists(collection_name):    
+            return vectorstore.as_retriever(search_kwargs={"k": 3})
+    except Exception:
+        print("ERROR")
+    # return vectorstore.as_retriever(search_kwargs={"k": 3})
 
 
 # import hashlib

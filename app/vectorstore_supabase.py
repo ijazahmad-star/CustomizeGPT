@@ -2,18 +2,17 @@ import os
 from supabase import create_client
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import SupabaseVectorStore
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from dotenv import load_dotenv
 load_dotenv()
-# Ijaz@123-ahmad
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_API_KEY")
 
 if not SUPABASE_URL:
     raise ValueError("Missing SUPABASE_URL")
-
 if not SUPABASE_KEY:
-    raise ValueError("Missing SUPABASE_KEY in environment variables")
+    raise ValueError("Missing SUPABASE_API_KEY")
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 embeddings = OpenAIEmbeddings()
@@ -30,6 +29,10 @@ def create_or_load_vectorstore(docs=None):
     table_name = "documents"
     if docs:
         docs = clean_metadata(docs)
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=500, chunk_overlap=100
+            )
+        docs = text_splitter.split_documents(docs)
         vectorstore = SupabaseVectorStore.from_documents(
             docs,
             embeddings,
@@ -43,7 +46,7 @@ def create_or_load_vectorstore(docs=None):
             client=supabase,
             table_name=table_name,
         )
-        print("oaded existing Supabase vector store.")
+        print("Loaded existing Supabase vector store.")
     return vectorstore.as_retriever(search_kwargs={"k": 3})
 
 def load_vectorstore():
@@ -55,3 +58,106 @@ def load_vectorstore():
     )
     print("Supabase vector store loaded successfully.")
     return vectorstore.as_retriever(search_kwargs={"k": 3})
+
+
+def add_prompt(name: str, prompt: str):
+    existing = supabase.table("prompts").select("id").eq("name", name).execute()
+    if existing.data:
+        return {"error": f"Prompt '{name}' already exists."}
+    res = supabase.table("prompts").insert({"name": name, "prompt": prompt}).execute()
+    return {"message": f"Prompt '{name}' added successfully.", "data": res.data}
+
+def get_prompts():
+    res = supabase.table("prompts").select("id, name, prompt, is_active").execute()
+    return {"prompts": res.data or []}
+
+def edit_prompt(old_name: str, new_name: str = None, new_prompt: str = None):
+    existing = supabase.table("prompts").select("id").eq("name", old_name).execute()
+    if not existing.data:
+        return {"error": f"Prompt '{old_name}' not found."}
+    update_data = {}
+    if new_name:
+        update_data["name"] = new_name
+    if new_prompt:
+        update_data["prompt"] = new_prompt
+    res = supabase.table("prompts").update(update_data).eq("name", old_name).execute()
+    return {"message": f"Prompt '{old_name}' updated successfully.", "data": res.data}
+
+def delete_prompt(name: str):
+    existing = supabase.table("prompts").select("id").eq("name", name).execute()
+    if not existing.data:
+        return {"error": f"Prompt '{name}' not found."}
+    res = supabase.table("prompts").delete().eq("name", name).execute()
+    return {"message": f"Prompt '{name}' deleted successfully."}
+
+def set_active_prompt(name: str):
+    supabase.table("prompts").update({"is_active": False}).neq("name", name).execute()
+    target = supabase.table("prompts").update({"is_active": True}).eq("name", name).execute()
+    if not target.data:
+        return {"error": f"Prompt '{name}' not found."}
+    return {"message": f"Prompt '{name}' set as active."}
+
+def get_active_prompt():
+    res = supabase.table("prompts").select("name, prompt").eq("is_active", True).limit(1).execute()
+    if not res.data:
+        return {"error": "No active prompt found."}
+    return {"active_prompt": res.data[0]}
+
+
+# import os
+# from supabase import create_client
+# from langchain_openai import OpenAIEmbeddings
+# from langchain_community.vectorstores import SupabaseVectorStore
+# from dotenv import load_dotenv
+# load_dotenv()
+# # Ijaz@123-ahmad
+
+# SUPABASE_URL = os.getenv("SUPABASE_URL")
+# SUPABASE_KEY = os.getenv("SUPABASE_API_KEY")
+
+# if not SUPABASE_URL:
+#     raise ValueError("Missing SUPABASE_URL")
+
+# if not SUPABASE_KEY:
+#     raise ValueError("Missing SUPABASE_KEY in environment variables")
+
+# supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+# embeddings = OpenAIEmbeddings()
+
+# def clean_metadata(docs):
+#     cleaned_docs = []
+#     for doc in docs:
+#         meta = doc.metadata or {}
+#         doc.metadata = {k: str(v) for k, v in meta.items() if v}
+#         cleaned_docs.append(doc)
+#     return cleaned_docs
+
+# def create_or_load_vectorstore(docs=None):
+#     table_name = "documents"
+#     if docs:
+#         docs = clean_metadata(docs)
+#         vectorstore = SupabaseVectorStore.from_documents(
+#             docs,
+#             embeddings,
+#             client=supabase,
+#             table_name=table_name,
+#         )
+#         print(f"Inserted {len(docs)} documents into Supabase.")
+#     else:
+#         vectorstore = SupabaseVectorStore(
+#             embedding=embeddings,
+#             client=supabase,
+#             table_name=table_name,
+#         )
+#         print("oaded existing Supabase vector store.")
+#     return vectorstore.as_retriever(search_kwargs={"k": 3})
+
+# def load_vectorstore():
+#     table_name = "documents"
+#     vectorstore = SupabaseVectorStore(
+#         embedding=embeddings,
+#         client=supabase,
+#         table_name=table_name,
+#     )
+#     print("Supabase vector store loaded successfully.")
+#     return vectorstore.as_retriever(search_kwargs={"k": 3})

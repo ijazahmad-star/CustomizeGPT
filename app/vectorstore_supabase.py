@@ -6,6 +6,24 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from dotenv import load_dotenv
 load_dotenv()
 
+# create table public.documents (
+#   id uuid not null default gen_random_uuid (),
+#   content text null,
+#   metadata jsonb null,
+#   embedding public.vector null,
+#   constraint documents_pkey primary key (id)
+# ) TABLESPACE pg_default;
+
+# create table public.prompts (
+#   id uuid not null default gen_random_uuid (),
+#   name text not null,
+#   prompt text not null,
+#   is_active boolean null default false,
+#   constraint prompts_pkey primary key (id),
+#   constraint prompts_name_key unique (name)
+# ) TABLESPACE pg_default;
+
+
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_API_KEY")
 

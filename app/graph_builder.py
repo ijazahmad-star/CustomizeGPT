@@ -4,6 +4,7 @@ from langchain_openai import ChatOpenAI
 # from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.prebuilt import ToolNode
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import START, END
 import os
 
 def build_workflow(tools, system_prompt):
@@ -21,12 +22,12 @@ def build_workflow(tools, system_prompt):
         last_message = state["messages"][-1]
         if last_message.tool_calls:
             return "tools"
-        return "__end__"
+        return END
 
     workflow = StateGraph(MessagesState)
     workflow.add_node("agent", call_model)
     workflow.add_node("tools", tool_node)
-    workflow.add_edge("__start__", "agent")
+    workflow.add_edge(START, "agent")
     workflow.add_conditional_edges("agent", should_continue)
     workflow.add_edge("tools", "agent")
 

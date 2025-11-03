@@ -46,7 +46,7 @@ def clean_metadata(docs):
 def create_or_load_vectorstore(docs=None):
     table_name = "documents"
     if docs:
-        docs = clean_metadata(docs)
+        # docs = clean_metadata(docs)
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=500, chunk_overlap=50
             )
@@ -65,7 +65,17 @@ def create_or_load_vectorstore(docs=None):
             table_name=table_name,
         )
         print("Loaded existing Supabase vector store.")
-    return vectorstore.as_retriever(search_kwargs={"k": 3})
+    return vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 3})
+
+def get_vectorstore(docs=None):
+    table_name = "documents"
+    vectorstore = SupabaseVectorStore(
+        embedding=embeddings,
+        client=supabase,
+        table_name=table_name,
+    )
+    print("Supabase vector store loaded successfully.")
+    return vectorstore
 
 def load_vectorstore():
     table_name = "documents"
@@ -75,7 +85,7 @@ def load_vectorstore():
         table_name=table_name,
     )
     print("Supabase vector store loaded successfully.")
-    return vectorstore.as_retriever(search_kwargs={"k": 3})
+    return vectorstore
 
 
 def add_prompt(name: str, prompt: str):

@@ -56,18 +56,14 @@ app.add_middleware(
 
 @app.post("/query")
 async def handle_query(request: QueryRequest):
-
     active_prompt_data = get_active_prompt()
     if not active_prompt_data or "active_prompt" not in active_prompt_data:
         raise HTTPException(status_code=404, detail="No active prompt found.")
 
     system_prompt = active_prompt_data["active_prompt"]["prompt"]
-
-    retriever = load_vectorstore()
-    tools = create_retriever_tool(retriever)
+    tools = create_retriever_tool()
     graph = build_workflow(tools, system_prompt)
     config = {"configurable": {"thread_id": "1"}}
-
     response = graph.invoke({"messages": request.query}, config=config)
     return {"response": response["messages"][-1].content}
 

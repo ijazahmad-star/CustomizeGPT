@@ -101,7 +101,9 @@ async def upload_file(file: UploadFile = File(...)):
 
 @app.post("/add_prompt")
 def add_prompt_endpoint(request: PromptRequest):
-    return add_prompt(request.name, request.prompt)
+    result = add_prompt(request.name, request.prompt)
+    return {"status": "success", "result": result}
+    # return add_prompt(request.name, request.prompt)
 
 @app.get("/get_prompts")
 def get_prompts_endpoint():

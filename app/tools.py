@@ -18,8 +18,26 @@ from langchain_openai import OpenAIEmbeddings
 from supabase import create_client
 from langchain.tools import tool
 import os
+
+from sentence_transformers import CrossEncoder
 from dotenv import load_dotenv
 load_dotenv()
+
+
+# load cross-encoder
+cross_encoder = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+
+# Helper function to rerank the results
+def rerank_with_cross_encoder(query, docs):
+    print("Re-Ranking the results...")
+    pairs = [(query, d["page_content"]) for d in docs]
+    scores = cross_encoder.predict(pairs)
+    ranked = [
+        {**doc, "rerank_score": float(score)}
+        for doc, score in zip(docs, scores)
+    ]
+    ranked.sort(key=lambda x: x["rerank_score"], reverse=True)
+    return ranked
 
 # Supabase credentials
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -33,7 +51,7 @@ def create_retriever_tool():
     def retrieve_documents(query: str):
         """Retrieve relevant documents from Supabase."""
         query_embedding = embeddings.embed_query(query)
-        print("I am in the tool...")
+        print("I am in the tool...") # just to check the agent uses this tool or not
         response = supabase.rpc(
             "match_documents",
             {
@@ -45,7 +63,7 @@ def create_retriever_tool():
         if not response.data:
             return "No matching documents found.", []
 
-        print("Got some data...")
+        print("Got some data...") # Just to check if model/agent got some data...
         docs = []
         for doc in response.data:
             docs.append({
@@ -54,10 +72,17 @@ def create_retriever_tool():
                 "similarity": doc["similarity"]
             })
 
-        serialized = "\n\n".join(
-            f"Similarity: {d['similarity']:.3f}\nSource: {d['metadata']}\nContent: {d['page_content']}"
-            for d in docs
-        )
-        return serialized, docs
+        reranked = rerank_with_cross_encoder(query, docs)
+        top_docs = reranked[:3]
 
+        # serialized = "\n\n".join(
+        #     f"Similarity: {d['similarity']:.3f}\nSource: {d['metadata']}\nContent: {d['page_content']}"
+        #     for d in docs
+        # )
+        # return serialized, docs
+        serialized = "\n\n".join(
+            f"Rerank Score: {d['rerank_score']:.3f}\nSource: {d['metadata']}\nContent: {d['page_content']}"
+            for d in top_docs
+        )
+        return serialized, top_docs
     return [retrieve_documents]
